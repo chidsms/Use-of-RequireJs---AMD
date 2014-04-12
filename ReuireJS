@@ -1,0 +1,685 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+
+<html>
+<head>
+<title>Branch Workflow</title>
+
+<style type="text/css">
+<%
+	User currentUser = User.getCurrentUser();
+	AccessControlHelper ach = new AccessControlHelper(currentUser); 
+	// System.out.println("### User Name: " + currentUser.getSiteMinderUserFirstName() + "." + currentUser.getSiteMinderUserLastName());
+	int tabCount = ach.getTabCount();
+	if(tabCount > 0) {
+		for (int i=0; i<tabCount-1; i++) { %> #dijit_form_Button_<%=i+1%>_label<% if(i != tabCount-2) { %>,<% } }%> {
+					border-right: #003d8f 1px solid;
+					border-spacing: 0px;
+					padding: 0px 10px 2px 10px;
+					color: #003d8f !important;
+					font-family: Verdana, Geneva, sans-serif !important;
+					font-weight: bold !important;
+					font-size: 11px !important;
+					cursor:pointer;				
+				} 
+		.dijitButtonText,#dijit_form_Button_<%=tabCount%>_label {
+			border-right: #003d8f 0px solid;
+			border-spacing: 0px;
+			padding: 0px 10px 2px 10px;
+			color: #003d8f !important;
+			font-family: Verdana, Geneva, sans-serif !important;
+			font-weight: bold !important;
+			font-size: 11px !important;
+			cursor:pointer;
+		}
+	<% } else { %>
+		.dijitButtonText,#dijit_form_Button_1_label {
+			border-right: #003d8f 0px solid;
+			border-spacing: 0px;
+			padding: 0px 10px 2px 10px;
+			color: #003d8f !important;
+			font-family: Verdana, Geneva, sans-serif !important;
+			font-weight: bold !important;
+			font-size: 11px !important;
+			cursor:pointer;
+	<%	} %>
+</style>
+
+<style type="text/css">
+/*Development */
+@import "issw/enablement/styles/dojoimports.css";
+/*Production */
+	/* @import "dojo_built/dojo/issw/enablement/styles/dojoimports.css";	*/
+</style>
+
+<!-- 
+<script type='text/javascript' src='unittest/firebug-lite-compressed.js'></script> -->
+ 
+
+
+<!--  Development 
+<script type="text/javascript" src="dojo_dev/dojo/dojo.js"
+	djConfig="isDebug: false, parseOnLoad: true,debugAtAllCosts: true"></script> -->
+
+
+
+<!-- Dojo Build  -->
+<script type="text/javascript" src="dojo_build/dojo.js"
+	djConfig="isDebug: false, parseOnLoad: true"></script> 
+<script type="text/javascript" src="dojo_build/bwf_task_detail.js" 
+	djConfig="isDebug: false, parseOnLoad: true">
+
+			dojo.registerModulePath("mssb", "../object");
+			dojo.require("object.TaskDetail.TaskDetailView");
+			dojo.require("dojo.parser");
+
+
+	</script> 
+
+<!-- Debug Dojo Build 
+<script type="text/javascript" src="dojo_build/dojo.js.uncompressed.js"
+	djConfig="isDebug: false, parseOnLoad: true,debugAtAllCosts: true"></script>
+<script type="text/javascript" src="dojo_build/admin.js.uncompressed.js"></script>
+<script type="text/javascript" src="dojo_build/bwf_task_detail.js.uncompressed.js"></script> -->
+
+
+<%
+	String env = System.getProperty("was_environment");
+%>
+
+<script type="text/javascript">
+
+
+			//var object = object || {}; // For development mode
+			object = object || {}; // For dojo_build
+			object.convertedUser = <%= currentUser.isConvertedLSB() %>; 
+			object.loggedInUser = {};
+			object.loggedInUser.isBranchOps = <%=	currentUser.isBranchOps()	%>;
+			object.loggedInUser.isFCops =  <%=currentUser.isFCOps()%>;
+			//HL9.2 added for SRU users
+			object.loggedInUser.isSRUAssociate = <%= currentUser.isSRUAssociate() %>;
+			object.loggedInUser.isSRUSupervisor = <%= currentUser.isSRUSupervisor() %>;		
+
+			//KS 10.2 added for ATS users
+			object.loggedInUser.isATSOps = <%= currentUser.isACATSOperations() %>;
+			object.loggedInUser.isATSApprover = <%= currentUser.isACATSApprover() %>;		
+
+			object.reconHolder = "";
+			object.globalLookup = 
+				<% LookUpManager lookupMgr = new com.object.bwf.ui.lookup.LookUpManager(); %>
+				<%=	lookupMgr.getLookDataAsJSON() %>;
+
+			<% if(env != null) { %>
+			object.globalLookup.environment = '<%= env %>';
+			<% } %>
+			object.windowopen = function(nativeURL) {
+				nativeWindow = window.open(nativeURL, "nativeWindow", "location=1,status=1,scrollbars=1,menubar=1,toolbar=1,width=960,height=300, resizable=1");
+			};
+
+			object.requestTypeData = "";
+		    object.getRequestTypes = function() {  
+	        	var rtData = {};
+	        	if(object.globalLookup.preferences.RT) {
+	           		dojo.forEach(object.globalLookup.preferences.RT,function(item){
+	              		var code;
+	              		var title;
+	     	     		try {
+	     	       			code = dojo.string.trim(item.code);
+	     	     		} catch(err) {
+	     	       			code = item.code;
+	     	     		}
+	     	     		title = item.description;
+	     	     		eval("rtData." + code + "= title;"); 
+	           		});
+	     		} 
+	     		return rtData;
+	     	},			 
+
+			mssb.globalRequestDetailController = function(requestType, contextData){
+				// alert("calling global request detail controller ");
+				var taskDataController;
+		    	var transType = dojo.string.trim(requestType);
+
+		    	switch(transType) {
+		    		case "ACATS_TransferIn":
+		    			taskDataController = new object.TaskDetail.ACATSController(contextData);
+		    			break;
+
+		    		case "TradeCorrection":
+		    			taskDataController = new object.TaskDetail.TradeCorrectionsController(contextData);
+		    			break;
+
+		    		case "AutoEnd":
+		    			taskDataController = new object.TaskDetail.AutoEndController(contextData);
+		    			break;
+
+		    		case "NewAccountDocument":
+		    			taskDataController = new object.TaskDetail.NewAccountsDocumentController(contextData);
+		    			break;
+
+		    		case "AddressChange":
+		    			taskDataController = new object.TaskDetail.AddressChangeController(contextData);
+		    			break;
+
+		    		case "MiscCorrespondence":
+		    			taskDataController = new object.TaskDetail.MiscCorrespondenceController(contextData);
+		    			break;
+
+		    		case "RejectDocument":
+		    			taskDataController = new object.TaskDetail.RejectDocumentController(contextData);
+		    			break;
+
+		    		case "Complaint_FA_OPS_Staff":
+		    		case "ComplaintMgmtTeam":
+		    		case "ComplaintComplex_BOM":
+		    			taskDataController = new object.TaskDetail.ComplaintsTaskController(contextData);
+		    			break;
+
+					case "STLOA":
+		    			taskDataController = new object.TaskDetail.STLOAController(contextData);
+						break;
+
+					case "CheckRequest":
+		    			taskDataController = new object.TaskDetail.CheckRequestController(contextData);
+						break;
+
+					case "JournalsEntry":
+		    			taskDataController = new object.TaskDetail.JournalsEntryController(contextData);
+						break;
+
+					case "SPS_NewInstructionSetup":
+		    			taskDataController = new object.TaskDetail.SPSNewInstructionSetupController(contextData);
+						break;
+
+					case "SPS_Modification":
+		    			taskDataController = new object.TaskDetail.SPSModificationController(contextData);
+						break;
+
+					case "FedFunds":
+		    			taskDataController = new object.TaskDetail.FedFundsController(contextData);
+						break;
+
+					case "AFT_ACH_NewInstructionSetup":
+		    			taskDataController = new object.TaskDetail.AFTACHNewInstructionSetupController(contextData);
+						break;
+
+					case "AFT_ACH_Execution":
+		    			taskDataController = new object.TaskDetail.AFTACHExecutionController(contextData);
+						break;
+
+					case "AFT_ACH_Modification":
+		    			taskDataController = new object.TaskDetail.AFTACHModificationController(contextData);
+						break;
+
+					case "VDA":
+		    			taskDataController = new object.TaskDetail.VDAController(contextData);
+						break;
+
+					case "EmailUpload":
+						taskDataController = new object.TaskDetail.EmailUploadController(contextData);
+						break;
+		    	//	default:
+		    	//		taskDataController = new object.TaskDetail.MoneyMovementController(contextData);
+		    	}
+
+		     	return taskDataController;
+			//	if(requestType == 'FedFunds'){
+			};  
+
+			object.error = function(error, msg, taskID, documentViewer, firstLevelDialog) {
+				console.debug(error);
+				var dialog = dijit.byId("bwferrorDialog");
+
+				if(taskID && taskID != null){
+					dialog.setAttribute("templateid", taskID);
+				} else if(documentViewer && documentViewer != null){
+					dialog.setAttribute("docViewer", documentViewer);
+				}
+
+                if(firstLevelDialog != null){
+                    dialog.setAttribute("firstLevelDialog", firstLevelDialog);
+                }
+                
+				var div = dojo.byId("bwferrorMessage");
+
+				// admin backend will sometimes return a useful error message in the body
+				// check for this by searching for a property called userReadableError
+				try {
+					msg = dojo.fromJson(error.responseText).userReadableError;
+				} catch(e) {
+					// otherwise, unless a message was passed in, a default is used
+					//console.debug(e);
+					if(!msg) msg = "An unexpected error occurred";
+				}
+
+				dojo.attr(div, "innerHTML", msg);
+				dojo.style(dialog.domNode, "display", "block");
+				dialog.show();
+			};
+
+			object.tabMenu_hideDocViewer = function(taskid) {
+				var documentViewer = dijit.byId(taskid+"documentViewer");
+				if(documentViewer != null) {
+				  documentViewer.documentViewerSignature.domNode.style.display = "none";
+				  documentViewer.documentViewerContent.domNode.style.display = "none";
+				}
+			};
+
+			object.tabMenu_showDocViewer = function(taskid) {
+				var documentViewer = dijit.byId(taskid+"documentViewer");
+				if(documentViewer != null) {
+				  documentViewer.documentViewerSignature.domNode.style.display = "";
+				  documentViewer.documentViewerContent.domNode.style.display = "";
+				}
+			};
+
+			object.complaintsPublishController = function(taskId,formId) {
+				dojo.publish(formId + 'submitted' + taskId,[{}]);
+			};
+
+
+			mssb.globalHelpController = function(component){
+				var url = "";
+
+				switch(component) {
+		    		case "My Reminders":
+		    			url = "http://objectintranet.msdwis.com/templatedata/category/L3_HTML/data/ServiceCentral/Tools_Resources/bw_dashboard.dcr#2";
+		    			break;
+
+		    		case "Previous Days Activities":
+		    			url = "http://objectintranet.msdwis.com/templatedata/category/L3_HTML/data/ServiceCentral/Tools_Resources/bw_dashboard.dcr#3";
+		    			break;
+
+		    		case "Tasks":
+		    			url = "http://objectintranet.msdwis.com/templatedata/category/L3_HTML/data/ServiceCentral/Tools_Resources/bw_dashboard.dcr#5";
+		    			break;
+
+		    		case "Doc Viewer":
+		    			url = "http://objectintranet.msdwis.com/templatedata/category/L3_HTML/data/ServiceCentral/Tools_Resources/bw_mytasks.dcr#taskbuttonsummary";
+		    			break;
+
+		    		case "My Tasks":
+		    			url = "http://objectintranet.msdwis.com/templatedata/category/L3_HTML/data/ServiceCentral/Tools_Resources/bw_mytasks.dcr#mytaskswindow";
+		    			break;
+
+		    		case "Reconcile Previous Day":
+		    			url = "http://objectintranet.msdwis.com/templatedata/category/L3_HTML/data/ServiceCentral/Tools_Resources/bw_reconcile.dcr#1";
+		    			break;
+
+		    		case "Reconcile Other Activities":
+		    			url = "http://objectintranet.msdwis.com/templatedata/category/L3_HTML/data/ServiceCentral/Tools_Resources/bw_reconcile.dcr#2";
+		    			break;
+
+		    		case "Verbal Request":
+		    			url = "http://objectintranet.msdwis.com/templatedata/category/L3_HTML/data/ServiceCentral/Tools_Resources/bw_verbal_request.dcr";
+		    			break;
+
+		    		case "Search Docs":
+		    			url = "http://objectintranet.msdwis.com/templatedata/category/L3_HTML/data/ServiceCentral/Tools_Resources/bw_searchdocs.dcr#1";
+		    			break;
+
+		    		case "Request History":
+		    			url = "http://objectintranet.msdwis.com/templatedata/category/L3_HTML/data/ServiceCentral/Tools_Resources/bw_taskhistory.dcr#1";
+		    			break;
+
+		    		case "Alternate Role":
+		    			url = "http://objectintranet.msdwis.com/templatedata/category/L3_HTML/data/ServiceCentral/Tools_Resources/bw_alternate.dcr";
+		    			break;
+
+		    		case "Admin":
+		    			url = "http://objectintranet.msdwis.com/templatedata/category/L3_HTML/data/ServiceCentral/Tools_Resources/bw_administration.dcr";
+		    			break;
+
+		    		default:
+		    			url = "http://objectintranet.msdwis.com/uiplsds/app-bin/intranetsolution/ServiceCentral/Tools_Resources/BW_consolidated_procedures_jump_page.page";
+		    	}
+
+		    	window.open(url,"_blank");
+			};
+
+			object.getTitleFromRequestType = function(requestType) {
+		    	var title = requestType;
+
+		    	if(object.globalLookup.preferences.RT) {
+			    	dojo.forEach(mssb.globalLookup.preferences.RT,function(item){
+			    		var code;
+			    		try {
+			    			code = dojo.string.trim(item.code);
+			    		} catch(err) {
+			    			code = item.code;
+			    		} 
+
+			    		try {
+			    			var requestType1 = dojo.string.trim(requestType);
+							requestType = requestType1;
+			    		} catch(err) {
+			    			// ignore
+			    		}
+
+			    		if(code == requestType) {
+			    			title = item.description;
+			    		}
+			    	});
+		    	} 
+
+		    	return title;
+    		};
+    		
+    		object.formatRequestAmount = function(requestAmount) {
+    			var formatted = requestAmount;
+    			
+    			var decIdx =  requestAmount.indexOf('.');
+    			if(decIdx != -1 && decIdx != (requestAmount.length - 3)) {
+    				while(decIdx != (formatted.length - 3)) {
+    					formatted += "0";
+    					decIdx =  formatted.indexOf('.');
+    				}
+    			} else {
+	    			if(decIdx == -1) {
+	    				formatted += ".00";	
+	    			}
+	    		}
+    			
+    			return formatted;
+    		};
+
+			object.NativeWeb = {};
+			object.NativeWeb.getNativeWebURL = function(lookupStr) {
+
+					var env = "unknown";
+					var nativeWebURL;
+					if(mssb.globalLookup.environment) {
+						env = mssb.globalLookup.environment;
+					}
+
+					dojo.xhrGet({
+						url:"/bwfuiwd/mssb/NativeWeb/NativeWebURLs." + env + ".json",
+						sync: true,
+						handleAs: "json",
+
+						error:function(e) {
+							mssb.error(new Error("Error determining native system URL location(s)"), "Error determining native system URL location(s)");
+						},
+
+						load:function(nativeURLs) {
+							// var nativeURLs = dojo.fromJson(nativeURLsJSON);
+							var nativeURLData = nativeURLs.nativeSystemURLs;
+							var idx = 0;
+							for(idx = 0; idx<nativeURLData.length; idx++) {
+								if(nativeURLData[idx].key == lookupStr) {
+									nativeWebURL = nativeURLData[idx].url;
+									break;
+								}
+							}
+
+							if(!nativeWebURL) {
+								mssb.error(new Error("Error determining native system URL"), "Error determining native system URL");
+							}
+						}
+					});
+
+					return nativeWebURL;
+			};
+
+			object.NativeWeb.getNativeWebData = function(lookupStr) {
+
+			  var env = "unknown";
+			  var nativeWebData;
+			  if(mssb.globalLookup.environment) {
+			    env = object.globalLookup.environment;
+			  }
+
+			  dojo.xhrGet({
+			    url:"/bwfuiwd/mssb/NativeWeb/NativeWebURLs." + env + ".json",
+			    sync: true,
+			    handleAs: "json",
+
+			    error:function(e) {
+			      object.error(new Error("Error determining native system URL location(s)"), "Error determining native system URL location(s)");
+			    },
+
+			    load:function(nativeURLs) {
+			      var nativeURLData = nativeURLs.nativeSystemURLs;
+			      var idx = 0;
+			      for(idx = 0; idx<nativeURLData.length; idx++) {
+			        if(nativeURLData[idx].key == lookupStr) {
+			          nativeWebData = nativeURLData[idx];
+			          break;
+			        }
+			      }
+
+			      if(!nativeWebData) {
+			        mssb.error(new Error("Error determining native system URL"), "Error determining native system URL");
+			      }
+			    }
+			  });
+
+			  return nativeWebData;
+			};
+
+			object.launchWindow = function(nativeWebData) {
+			  var nativeWebURL = nativeWebData.url;
+			  var nativeTargetId = nativeWebData.targetId;
+			  var nativeQuery = nativeWebData.query;
+			  var nativeQueryJSON = null;
+
+			  if(nativeQuery != "") {
+			    nativeQueryJSON = eval('(' + nativeQuery+ ')');
+			  }
+
+			  // Check if this is in MS360
+			  if(window.launchChildApp == undefined) {
+			    // Not MS360 - Do normal processing
+			    mssb.windowopen(nativeWebURL);
+			  } else {
+			    // This is MS360
+			    if(nativeTargetId == "") {
+			      // Target Id not defined - Do normal processing
+			      mssb.windowopen(nativeWebURL);
+			    } else {
+			      // Target Id defined
+			      var taskDetailTabContainer = dijit.byId("taskDetailTabContainer");
+				  var taskDetailTabContainerDOM = dojo.byId("taskDetailTabContainer");
+
+			      // Check if the current page is task details
+			      if(taskDetailTabContainerDOM && taskDetailTabContainer) {
+			        var selectedTab = taskDetailTabContainer.selectedChildWidget;
+			        //var selectedTabId = selectedTab.id;
+			        var selectedTabId = selectedTab.id.substring(0,selectedTab.id.indexOf("__"));
+			        var cachedTasks = mssb.taskController.taskIdCache;
+
+			        // Check if there are items in the cache and contains an item for the selected tab id.
+			        if(cachedTasks.count > 0 && cachedTasks.containsKey(selectedTabId)) {
+			          var cachedTaskData = cachedTasks.item(selectedTabId);
+			          var branchNumber = cachedTaskData.taskController.taskIpData.BranchNumber;
+			          var accountNumber = cachedTaskData.taskController.taskIpData.AccountNumber;
+
+			          // Launch the MS360 app
+			          launchChildApp(nativeTargetId, branchNumber, accountNumber, 0, nativeQueryJSON, null, "true");
+
+			        } else {
+			          // The task is not cached - Launch without the context.
+			          launchChildApp(nativeTargetId, 0, 0, 0, nativeQueryJSON, null, "true");    
+			        }
+
+			      } else {
+			        // Not task details page - Launch without the context.
+			        launchChildApp(nativeTargetId, 0, 0, 0, nativeQueryJSON, null, "true");
+			      }
+
+			    }
+			  }
+			};
+
+			dojo.addOnLoad(function(){
+				if(mssb.globalLookup && mssb.globalLookup.environment && mssb.globalLookup.environment != "prod") {
+					if(mssb.globalLookup.pcgId) {
+						document.title = "Branch Workflow - " + mssb.globalLookup.pcgId;
+					}
+				}
+				object.taskController = new object.TaskDetail.TaskDetailView();
+				object.requestTypeData = object.getRequestTypes();  
+				dojo.connect(window, "error", function(error){
+					console.debug(error);
+					//mssb.error(error);
+				});
+			});
+
+			//for business space url			
+			globalbamUrl ="<%=com.mssb.bwf.ui.process.services.util.BAMPropertyConfiguration.instance().getProperty("bam.url")%>";
+</script>
+
+
+<!-- comment out when using Dojo Build 	
+<script type="text/javascript">
+
+			dojo.require("dijit.dijit");
+            dojo.require("dijit.form.ComboBox");
+            dojo.require("dijit.TitlePane");
+            dojo.require("dojox.grid.DataGrid");
+            dojo.require("dijit.form.Form");
+            dojo.require("dijit.form.ValidationTextBox");
+            dojo.require("dijit.form.DateTextBox");
+            dojo.require("dijit.Dialog");
+            dojo.require("dojo.data.ItemFileWriteStore");
+            dojo.require("dijit.form.Button");
+            dojo.require("dijit.form.RadioButton");
+            dojo.require("dijit.form.ComboBox");
+            dojo.require("dijit.form.CheckBox");
+			dojo.require("dijit.form.Select");
+            dojo.require("dijit.layout.TabContainer");
+            dojo.require("dijit.form.Textarea");
+            dojo.require("dojo.io.iframe");
+            dojo.require("dijit.form.DateTextBox");
+            dojo.require("dijit.form.TimeTextBox");
+            dojo.require("dijit.layout.SplitContainer");
+            dojo.require("dijit.form.FilteringSelect");
+            dojo.require("dijit.layout.ContentPane");
+            dojo.require("dojox.data.QueryReadStore");
+            dojo.require("dojo.NodeList-traverse");
+            dojo.require("dojox.widget.Standby");
+            dojo.require("dojo.date.locale");
+			dojo.require("dijit.form.MultiSelect");
+            
+            
+            dojo.registerModulePath("issw", "../../issw");
+            dojo.require("issw.enablement.layout.FrameworkLayout");
+            
+            dojo.registerModulePath("mssb", "../../mssb");
+            dojo.require("mssb.Reconciliation.ReconciliationView");
+            dojo.require("mssb.SearchDocument.SearchDocumentView");
+            dojo.require("mssb.TaskDetail.TaskDetailView");
+            dojo.require("mssb.DocumentWidget.DocumentViewer");
+            dojo.require("mssb.BWFTaskList.TaskListWidget");
+            dojo.require("mssb.TaskDetail.AssociateDocumentTaskController");
+            dojo.require("mssb.TaskDetail.AssociatedTaskController");
+            dojo.require("mssb.Administration.admin");
+            dojo.require("mssb.dashboard.ReminderWidget");
+            dojo.require("mssb.TaskHistory.TaskHistoryView");
+			dojo.require("mssb.NativeWeb.NativeWeb");
+
+			dojo.require("mssb.TaskDetail.MoneyMovementController");
+			dojo.require("mssb.TaskDetail.ACATSController");
+			dojo.require("mssb.TaskDetail.TradeCorrectionsController");
+			dojo.require("mssb.TaskDetail.ComplaintsTaskController");
+			dojo.require("mssb.TaskDetail.NewAccountsDocumentController");
+			dojo.require("mssb.TaskDetail.AutoEndController");
+            dojo.require("mssb.TaskDetail.AddressChangeController");
+            dojo.require("mssb.TaskDetail.MiscCorrespondenceController");
+            dojo.require("mssb.TaskDetail.RejectDocumentController");
+			dojo.require("mssb.reports.ReportsController");
+            
+			dojo.registerModulePath("taskTemplates", "../../taskTemplates");
+            
+			dojo.require("dojo.parser");
+		</script> -->
+
+
+</head>
+<body class="bwfui" align="center">
+<div id="bwfmainbody" class="page" align="center">
+<div dojoType="issw.enablement.layout.FrameworkLayout"
+	layout="topToolbar" id="frameworkController">
+
+	<% if(tabCount > 0) { %>
+
+		<% if(ach.canAccessTab("FACSADashboard")) { %>
+			<div class="pipe" dojoType="issw.enablement.layout.FrameworkPage" name="FACSADashboard" label="Dashboard" page="mssb/dashboard/facsa_dashboard.html"></div>
+	    <% } else if(ach.canAccessTab("ACATSDashboard")) { %>
+			<div class="pipe" dojoType="issw.enablement.layout.FrameworkPage" name="Dashboard" label="Dashboard" page="mssb/dashboard/acats_dashboard.html"></div>			
+	    <% } else if(ach.canAccessTab("Dashboard")) { %>
+			<div class="pipe" dojoType="issw.enablement.layout.FrameworkPage" name="Dashboard" label="Dashboard" page="mssb/dashboard/dashboard.html"></div>	    	
+	    <% } else if(ach.canAccessTab("DashboardNoTasks")) { %>
+			<div class="pipe" dojoType="issw.enablement.layout.FrameworkPage" name="DashboardNoTasks" label="Dashboard" page="mssb/dashboard/dashboard_no_tasks.html"></div>
+	    <% } %>
+		<% if(ach.canAccessTab("MyTasks")) { %>
+			<div class="pipe" dojoType="issw.enablement.layout.FrameworkPage" name="MyTasks" label="My Tasks" page="mssb/TaskDetail/TaskDetail.html"></div>
+	    <% } %>
+		<% if(ach.canAccessTab("Escalations")) { %>
+			<div dojoType="issw.enablement.layout.FrameworkPage" name="Escalations" label="Escalations" page="mssb/Escalations/EscalationView.html"></div>
+	    <% } %>
+		<% if(ach.canAccessTab("Reconcile")) { %>
+			<div dojoType="issw.enablement.layout.FrameworkPage" name="Reconcile" label="Reconcile" page="mssb/Reconciliation/ReconciliationView.html"></div>
+	    <% } %>
+	    <% if(ach.canAccessTab("VerbalRequest")) { %>
+			<div dojoType="issw.enablement.layout.FrameworkPage" name="VerbalRequest" label="Verbal/Electronic Req." page="mssb/VerbalRequest/VerbalRequestView.html"></div>
+	    <% } %>
+	    <% if(ach.canAccessTab("SearchDoc")) { %>
+			<div dojoType="issw.enablement.layout.FrameworkPage" name="SearchDoc" label="Search Docs" page="mssb/SearchDocument/SearchDocumentView.html"></div>
+	    <% } %>
+	    <% if(ach.canAccessTab("ACATSRequestHistory")) { %>
+			<div dojoType="issw.enablement.layout.FrameworkPage" name="RequestHistory" label="Request History" page="mssb/TaskHistory/AcatsTaskHistoryView.html"></div>
+	    <% } else if (ach.canAccessTab("RequestHistory")) {%>
+	    	<div dojoType="issw.enablement.layout.FrameworkPage" name="RequestHistory" label="Request History" page="mssb/TaskHistory/TaskHistoryView.html"></div>
+	    <% } %>
+	    <% if(ach.canAccessTab("ACATSAlternateRole")) { %>
+			<div dojoType="issw.enablement.layout.FrameworkPage" name="AlternateRole" label="Alt. Role" page="mssb/AlternateRole/AcatsAlternateRoleView.html"></div>
+	    <% } else if (ach.canAccessTab("AlternateRole")) {%>
+	    	<div dojoType="issw.enablement.layout.FrameworkPage" name="AlternateRole" label="Alt. Role" page="mssb/AlternateRole/AlternateRoleView.html"></div>
+	    <% } %>
+	    <% if(ach.canAccessTab("Administration")) { %>
+			<div dojoType="issw.enablement.layout.FrameworkPage" name="Administration" label="Admin" page="mssb/Administration/admin.html"></div>
+	    <% } %>
+		<% if(ach.canAccessTab("Reporting")) { %>
+			<div dojoType="issw.enablement.layout.FrameworkPage" name="Reporting" label="Reporting" page="mssb/reports/reports.html"></div>
+		<% } %>
+		<% if(ach.canAccessTab("BAM")) { %>
+			<div dojoType="issw.enablement.layout.FrameworkPage" name="BAM"	label="BAM" page="mssb/bam/bam.html"></div>
+		<% } %>
+		<% if(ach.canAccessTab("Help")) { %>
+<!--			<div dojoType="issw.enablement.layout.FrameworkLink" name="Help" label="Help" url="http://mssbintranet.msdwis.com/uiplsds/app-bin/intranetsolution/ServiceCentral/Tools_Resources/BW_consolidated_procedures_jump_page.page"></div>-->
+		<% } %>
+	<% } else if(ach.isMaximumEntitlementsExceeded()) { %>
+		<div class="pipe" dojoType="issw.enablement.layout.FrameworkPage" name="Error" label="Error" page="mssb/dashboard/errorExceededEntl.html"></div>		
+	<% } else { %>
+		<div class="pipe" dojoType="issw.enablement.layout.FrameworkPage" name="Error" label="Error" page="mssb/dashboard/error.html"></div>	
+	<% } %>	
+</div>
+</div>
+
+	<!-- Help system Dialog -->
+        <div id="helpDialog" dojoType="dijit.Dialog" title="MSSB BWF Help" style="display:none;border-style: double; border-color: #234a83; width:675px;height:450px;">
+
+            <div dojoType="dijit.layout.ContentPane" id="helpDialogContainer" href="" style="width:650px;height:430px;overflow-y: auto;">
+            </div>
+        </div>
+        
+      <!-- Start Error Dialog -->
+      <div class="bwferrorDialogWrapper">
+        <div id="bwferrorDialog" dojoType="mssb.TaskDetail.CustomDialog" title="Error Message" class="bwferrorDialogFrame" style="display:none;">
+          <div class="dialog-bg"></div>            
+            <div id="bwferrorMessage" class="errorMessageContainer"></div>            
+            <!-- Start Footer -->
+            <div class="errorDialogButtonPanel">
+              <div class="errorDialogButtonHolder">
+                <button dojoType="dijit.form.Button" class="bwferrorDialogtbtn" onClick="dijit.byId('bwferrorDialog').hide(); dojo.attr(dojo.byId('bwferrorMessage'),'innerHTML','');">
+                  <img src="/bwfuiwd/images/searchdocClosebutton.png" border="0" align="absmiddle" class="btn-pad" />
+                </button>		
+              </div>		
+            </div>
+            <!-- End Footer -->            
+        </div>
+      </div>
+      <!-- Start Error Dialog -->
+</body>
+</html>
